@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -19,14 +18,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(url);
-    const html = await response.text();
+    const prompt = `Analiza el sitio web: ${url} y devuelve un JSON con SEO, resumen, público, keywords y mejoras`;
 
-    const title = html.match(/<title>(.*?)<\/title>/i)?.[1] || "";
-    const description = html.match(/<meta name="description" content="(.*?)"/i)?.[1] || "";
-    const h1 = html.match(/<h1.*?>(.*?)<\/h1>/i)?.[1] || "";
-
-    const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
@@ -35,58 +29,18 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: "llama3-70b-8192",
         messages: [
-          {
-            role: "system",
-            content: "Eres experto en marketing digital y SEO"
-          },
-          {
-            role: "user",
-            content: `
-Analiza este sitio:
-
-Title: ${title}
-Description: ${description}
-H1: ${h1}
-
-Devuelve SOLO JSON:
-{
-  "scores": {"seo": 70, "mobile": 70, "velocidad": 70},
-  "resumen": "",
-  "posicionamiento": "",
-  "publico": {
-    "edad": "",
-    "perfil": "",
-    "geografia": "",
-    "intereses": "",
-    "intencion": "",
-    "dispositivo": ""
-  },
-  "redes": [],
-  "seo_criterios": [],
-  "keywords": [],
-  "mejoras": [
-    {"impacto":"alto","texto":""}
-  ]
-}
-`
-          }
+          { role: "user", content: prompt }
         ]
       })
     });
 
-    const data = await ai.json();
-    const text = data.choices?.[0]?.message?.content || "{}";
+    const data = await response.json();
 
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = { resumen: text };
-    }
-
-    res.status(200).json(parsed);
+    return res.status(200).json({
+      result: data.choices?.[0]?.message?.content || "Sin respuesta"
+    });
 
   } catch (error) {
-    res.status(500).json({ error: "Error analizando sitio" });
+    return res.status(500).json({ error: "Error en el análisis" });
   }
 }
