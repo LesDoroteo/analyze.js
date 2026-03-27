@@ -1,75 +1,45 @@
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
 
+  // 🔥 Permitir solo POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { url } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ error: "URL requerida" });
-  }
-
   try {
-    const prompt = `
-Analiza este sitio web: ${url}
+    const { url } = req.body;
 
-Responde SOLO con JSON válido:
+    if (!url) {
+      return res.status(400).json({ error: "URL requerida" });
+    }
 
-{
-"scores":{"seo":0-100,"mobile":0-100,"velocidad":0-100},
-"resumen":"",
-"posicionamiento":"",
-"publico":{
-"edad":"",
-"perfil":"",
-"geografia":"",
-"intereses":"",
-"intencion":"",
-"dispositivo":""
-},
-"redes":[],
-"seo_criterios":[],
-"keywords":[],
-"mejoras":[]
-}
-`;
-
-    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "llama3-70b-8192",
         messages: [
-          { role: "user", content: prompt }
-        ]
+          {
+            role: "user",
+            content: `Analiza esta web: ${url} y devuelve un JSON válido con diagnóstico SEO`
+          }
+        ],
+        temperature: 0.3
       })
     });
 
-    const data = await groqResponse.json();
+    const data = await response.json();
 
-    // 👇 DEBUG CLAVE
-    console.log("GROQ:", data);
-
-    if (!data.choices) {
-      return res.status(500).json({
-        error: "Groq error",
-        detail: data
-      });
-    }
-
-    const result = data.choices[0].message.content;
-
-    return res.status(200).json({ result });
+    return res.status(200).json({
+      result: data.choices?.[0]?.message?.content || "Sin resultado"
+    });
 
   } catch (error) {
     return res.status(500).json({
-      error: "Error en análisis",
-      detail: error.message
+      error: "Error interno",
+      details: error.message
     });
   }
 }
