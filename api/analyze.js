@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
 
-  // 🔥 Permitir solo POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -11,6 +10,8 @@ export default async function handler(req, res) {
     if (!url) {
       return res.status(400).json({ error: "URL requerida" });
     }
+
+    console.log("URL recibida:", url);
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -30,13 +31,33 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await response.json();
+    // 🔥 LOG CRÍTICO
+    const rawText = await response.text();
+    console.log("Groq RAW:", rawText);
 
-    return res.status(200).json({
-      result: data.choices?.[0]?.message?.content || "Sin resultado"
-    });
+    if (!response.ok) {
+      return res.status(500).json({
+        error: "Error en Groq",
+        details: rawText
+      });
+    }
+
+    const data = JSON.parse(rawText);
+
+    const result = data?.choices?.[0]?.message?.content;
+
+    if (!result) {
+      return res.status(500).json({
+        error: "Respuesta vacía de Groq",
+        data
+      });
+    }
+
+    return res.status(200).json({ result });
 
   } catch (error) {
+    console.error("ERROR BACKEND:", error);
+
     return res.status(500).json({
       error: "Error interno",
       details: error.message
