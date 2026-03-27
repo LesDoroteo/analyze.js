@@ -1,12 +1,5 @@
 export default async function handler(req, res) {
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -19,15 +12,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Obtener HTML del sitio
-    const response = await fetch(url);
-    const html = await response.text();
-
-    // 2. Prompt optimizado
     const prompt = `
-Analiza este sitio web basado en su HTML:
-
-${html.substring(0, 8000)}
+Analiza este sitio web: ${url}
 
 Responde SOLO con JSON válido:
 
@@ -50,7 +36,6 @@ Responde SOLO con JSON válido:
 }
 `;
 
-    // 3. Llamada a Groq
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -60,18 +45,24 @@ Responde SOLO con JSON válido:
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.3
+          { role: "user", content: prompt }
+        ]
       })
     });
 
-    const groqData = await groqResponse.json();
+    const data = await groqResponse.json();
 
-    const result = groqData.choices?.[0]?.message?.content || "";
+    // 👇 DEBUG CLAVE
+    console.log("GROQ:", data);
+
+    if (!data.choices) {
+      return res.status(500).json({
+        error: "Groq error",
+        detail: data
+      });
+    }
+
+    const result = data.choices[0].message.content;
 
     return res.status(200).json({ result });
 
