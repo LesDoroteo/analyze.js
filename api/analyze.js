@@ -42,4 +42,7 @@ export default async function handler(req, res) {
       details: error.message
     });
   }
+
+    console.log("Método:", req.method);
+    console.log("Body:", req.body);
 }
