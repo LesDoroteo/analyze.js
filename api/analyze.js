@@ -1,4 +1,9 @@
 export default async function handler(req, res) {
+
+  // Al inicio del handler, ANTES de cualquier lógica:
+console.log("GROQ_API_KEY existe:", !!process.env.GROQ_API_KEY);
+console.log("Body recibido:", req.body);
+  
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -33,7 +38,7 @@ Reemplaza todos los valores de ejemplo con datos reales y específicos para el s
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "llama3-70b-8192",
+        model: "llama-3.3-70b-versatile",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3,
         max_tokens: 1500
