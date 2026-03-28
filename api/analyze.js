@@ -65,4 +65,8 @@ export default async function handler(req, res) {
       details: error.message
     });
   }
+
+  fix: redeploy env vars
+
+  console.log("KEY:", process.env.GROQ_API_KEY);
 }
