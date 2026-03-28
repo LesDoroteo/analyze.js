@@ -14,6 +14,11 @@ export default async function handler(req, res) {
   }
 
   try {
+
+    return res.status(200).json({
+    test: "backend funcionando"
+    });
+    
     console.log("KEY EXISTS:", !!process.env.GROQ_API_KEY);
 
     const { url } = req.body;
