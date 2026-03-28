@@ -55,11 +55,27 @@ export default async function handler(req, res) {
       });
     }
 
-    const data = JSON.parse(text);
 
-    return res.status(200).json({
-      result: data?.choices?.[0]?.message?.content
-    });
+    const raw = data?.choices?.[0]?.message?.content || "";
+
+let parsed = null;
+
+try {
+  const match = raw.match(/\{[\s\S]*\}/);
+  parsed = match ? JSON.parse(match[0]) : null;
+} catch (e) {
+  console.error("Parse error:", e);
+}
+
+return res.status(200).json({
+  raw,
+  parsed
+});
+  // const data = JSON.parse(text);
+
+  //  return res.status(200).json({
+  //    result: data?.choices?.[0]?.message?.content
+  //  });
 
   } catch (error) {
     console.error("ERROR:", error);
