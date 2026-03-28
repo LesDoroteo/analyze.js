@@ -1,11 +1,10 @@
 export default async function handler(req, res) {
 
-  // ✅ CORS HEADERS
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // 🔥 Manejar preflight
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -15,13 +14,13 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log("KEY EXISTS:", !!process.env.GROQ_API_KEY);
+
     const { url } = req.body;
 
     if (!url) {
       return res.status(400).json({ error: "URL requerida" });
     }
-
-    console.log("URL:", url);
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -58,15 +57,11 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("ERROR:", error);
 
     return res.status(500).json({
       error: "Error interno",
       details: error.message
     });
   }
-
-  fix: redeploy env vars
-
-  console.log("KEY:", process.env.GROQ_API_KEY);
 }
