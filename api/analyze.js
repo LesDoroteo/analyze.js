@@ -1,6 +1,15 @@
 export default async function handler(req, res) {
 
-  // 🔥 Permitir solo POST
+  // ✅ CORS HEADERS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // 🔥 Manejar preflight
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -11,6 +20,8 @@ export default async function handler(req, res) {
     if (!url) {
       return res.status(400).json({ error: "URL requerida" });
     }
+
+    console.log("URL:", url);
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -23,20 +34,32 @@ export default async function handler(req, res) {
         messages: [
           {
             role: "user",
-            content: `Analiza esta web: ${url} y devuelve un JSON válido con diagnóstico SEO`
+            content: `Devuelve SOLO JSON válido. Analiza: ${url}`
           }
         ],
         temperature: 0.3
       })
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    console.log("Groq:", text);
+
+    if (!response.ok) {
+      return res.status(500).json({
+        error: "Groq error",
+        details: text
+      });
+    }
+
+    const data = JSON.parse(text);
 
     return res.status(200).json({
-      result: data.choices?.[0]?.message?.content || "Sin resultado"
+      result: data?.choices?.[0]?.message?.content
     });
 
   } catch (error) {
+    console.error(error);
+
     return res.status(500).json({
       error: "Error interno",
       details: error.message
