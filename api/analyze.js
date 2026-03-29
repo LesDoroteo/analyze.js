@@ -181,23 +181,70 @@ export default async function handler(req, res) {
     // ─────────────────────────────────────────────────────────
     const socialsJson = JSON.stringify(siteData.socials || {}, null, 2);
 
-    const prompt = `Eres un experto en SEO y marketing digital. Analiza los datos REALES extraídos del sitio web ${url}.
+const prompt = `Eres un experto en SEO y marketing digital.
 
-REGLA CRÍTICA: Solo usa los datos que se te proporcionan a continuación. NO inventes información. Si un dato no está disponible, indícalo como "No detectado" o "Sin datos".
+Analiza los datos REALES extraídos del sitio web ${url}.
+
+REGLA CLAVE:
+- Usa los datos proporcionados como base
+- Puedes inferir información SOLO si está directamente relacionada con esos datos
+- NO inventes datos externos
+- Si algo no puede deducirse, indica "No detectado"
+
+TIPOS DE RESPUESTA:
+
+1. DATOS OBJETIVOS:
+→ Usa exactamente lo detectado
+
+2. ANÁLISIS (permitido):
+→ Puedes inferir usando lógica basada en:
+   - title
+   - headings
+   - estructura
+   - dominio
+
+→ Usa lenguaje como:
+   "Probablemente"
+   "Se sugiere que"
+   "Podría estar orientado a"
+
+INCLUYE ANÁLISIS BÁSICO:
+
+- Tipo de negocio detectado
+- Nivel de optimización SEO (bajo, medio, alto)
+- Claridad del mensaje principal
+- Nivel de madurez digital
+
+PÚBLICO OBJETIVO:
+
+- Inferir de contenido y estructura
+- NO inventar datos demográficos exactos
+- Sí estimar perfiles generales
+
+MEJORAS:
+
+- Basadas en datos reales detectados
+- Complementadas con buenas prácticas SEO estándar
 
 === DATOS REALES EXTRAÍDOS ===
 ${JSON.stringify(siteData, null, 2)}
 
-=== DATOS VERIFICADOS DE REDES SOCIALES ===
-${socialsJson}
-
-INSTRUCCIONES PARA REDES SOCIALES:
-- Si "encontrado: false" → estado: "no detectado", nota: "No se encontró link a esta red en el sitio web"
-- Si "encontrado: true" y "verificado: true" → estado: "activo", nota: incluir la URL real
-- Si "encontrado: true" y "verificado: false" → estado: "no verificado", nota: "Link encontrado pero no responde: URL"
-- NUNCA inventes URLs ni digas que una red existe si encontrado es false
+=== REDES SOCIALES VERIFICADAS ===
+${JSON.stringify(siteData.socials || {}, null, 2)}
 
 Responde ÚNICAMENTE con JSON válido puro, sin markdown, sin bloques de código:
+
+{
+  "scores": {...},
+  "resumen": "...",
+  "posicionamiento": "...",
+  "publico": {...},
+  "redes": [...],
+  "seo_criterios": [...],
+  "keywords": [...],
+  "mejoras": [...]
+}
+`;
 
 {"scores":{"seo":<0-100 basado en: titleLength=${siteData.titleLength}, metaDescLength=${siteData.metaDescLength}, h1Count=${siteData.h1Count}, hasRobots=${siteData.hasRobots}, hasSitemap=${siteData.hasSitemap}, canonical="${siteData.canonical?'sí':'no'}", hasSchema=${siteData.hasSchema}>,"mobile":<0-100 basado en viewport=${siteData.viewport}>,"velocidad":<0-100 basado en responseTime=${siteData.responseTime}ms scripts=${siteData.scripts} htmlSize=${siteData.htmlSize}KB>},"resumen":"<describe el sitio usando SOLO el title real: '${(siteData.title||"").replace(/'/g,"'")}' y los H1s: ${JSON.stringify(siteData.h1s||[])}>","posicionamiento":"<analiza basándote en datos reales: canonical=${!!siteData.canonical}, schema=${siteData.hasSchema}, robots=${siteData.hasRobots}, sitemap=${siteData.hasSitemap}, metaDesc presente=${!!siteData.metaDesc}>","publico":{"edad":"<infiere solo del title y h1s reales, sin inventar>","perfil":"<infiere del tipo de negocio según title y headings>","geografia":"<infiere del dominio ${new URL(url).hostname} y contenido>","intereses":"<infiere del title y h1s reales>","intencion":"<infiere del tipo de página>","dispositivo":"<${siteData.viewport?'Mobile optimizado (viewport presente)':'Sin viewport meta tag - posible problema mobile'}>"},"redes":[{"nombre":"Facebook","estado":"<usa los datos verificados, no inventes>","nota":"<URL real si encontrado, o 'No se encontró link en el sitio'>"},{"nombre":"Instagram","estado":"<usa los datos verificados>","nota":"<URL real si encontrado>"},{"nombre":"LinkedIn","estado":"<usa los datos verificados>","nota":"<URL real si encontrado>"},{"nombre":"TikTok","estado":"<usa los datos verificados>","nota":"<URL real si encontrado>"}],"seo_criterios":[{"criterio":"Título y meta descripción","score":<basado en titleLength=${siteData.titleLength} metaDescLength=${siteData.metaDescLength}>,"nota":"Title: '${(siteData.title||"Sin título").slice(0,70)}' (${siteData.titleLength} chars). Meta desc: ${siteData.metaDescLength} chars."},{"criterio":"Estructura de encabezados","score":<basado en h1Count=${siteData.h1Count} h2Count=${siteData.h2Count}>,"nota":"${siteData.h1Count} H1: ${JSON.stringify(siteData.h1s?.slice(0,2))}. ${siteData.h2Count} H2s."},{"criterio":"Imágenes optimizadas","score":<100 si imgsNoAlt=0, proporcional si hay sin alt>,"nota":"${siteData.imgsNoAlt} de ${siteData.totalImgs} imágenes sin atributo alt"},{"criterio":"URLs y canonical","score":<90 si canonical presente, 45 si no>,"nota":"${siteData.canonical?'Canonical: '+siteData.canonical:'Sin etiqueta canonical configurada'}"},{"criterio":"HTTPS / Seguridad","score":${siteData.isHttps?95:10},"nota":"${siteData.isHttps?'HTTPS activo y correcto':'NO usa HTTPS — crítico para SEO y seguridad'}"},{"criterio":"Velocidad de carga","score":<basado en responseTime=${siteData.responseTime}ms>,"nota":"Servidor respondió en ${siteData.responseTime}ms. ${siteData.scripts} scripts, ${siteData.styles} CSS, HTML: ${siteData.htmlSize}KB"}],"keywords":[<extrae máximo 6 keywords reales del title='${siteData.title}' metaKw='${siteData.metaKw}' h1s=${JSON.stringify(siteData.h1s||[])}. Si no hay suficientes keywords reales, pon menos de 6, no inventes>],"mejoras":[{"impacto":"alto","texto":"<mejora crítica basada en dato real, menciona el dato específico>"},{"impacto":"alto","texto":"<mejora crítica basada en dato real>"},{"impacto":"medio","texto":"<mejora importante con el dato real que la justifica>"},{"impacto":"medio","texto":"<mejora importante>"},{"impacto":"ok","texto":"<aspecto positivo real, con el dato que lo confirma>"},{"impacto":"ok","texto":"<aspecto positivo real>"}]}`;
 
