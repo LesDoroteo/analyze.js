@@ -35,7 +35,6 @@ export default async function handler(req, res) {
       const base = new URL(finalUrl).origin;
       const isHttps = finalUrl.startsWith("https://");
 
-      // ── Metadatos básicos ────────────────────────────────
       const title     = (html.match(/<title[^>]*>([^<]{1,200})<\/title>/i)||[])[1]?.trim()||"";
       const metaDesc  = (html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']{1,500})["']/i)||
                          html.match(/<meta[^>]*content=["']([^"']{1,500})["'][^>]*name=["']description["']/i)||[])[1]?.trim()||"";
@@ -44,21 +43,16 @@ export default async function handler(req, res) {
       const viewport  = /<meta[^>]*name=["']viewport["']/i.test(html);
       const hasSchema = /application\/ld\+json/i.test(html);
 
-      // ── Encabezados ──────────────────────────────────────
       const h1s = [...html.matchAll(/<h1[^>]*>([^<]{1,200})<\/h1>/gi)].map(m=>m[1].replace(/<[^>]+>/g,"").trim()).filter(Boolean);
       const h2s = [...html.matchAll(/<h2[^>]*>([^<]{1,200})<\/h2>/gi)].map(m=>m[1].replace(/<[^>]+>/g,"").trim()).filter(Boolean);
       const h3s = [...html.matchAll(/<h3[^>]*>([^<]{1,200})<\/h3>/gi)].map(m=>m[1].replace(/<[^>]+>/g,"").trim()).filter(Boolean);
 
-      // ── Imágenes ─────────────────────────────────────────
       const totalImgs = (html.match(/<img[^>]*>/gi)||[]).length;
       const imgsNoAlt = (html.match(/<img(?![^>]*\balt=["'][^"']+["'])[^>]*>/gi)||[]).length;
+      const scripts   = (html.match(/<script[^>]+src=["'][^"']+["']/gi)||[]).length;
+      const styles    = (html.match(/<link[^>]+rel=["']stylesheet["'][^>]*>/gi)||[]).length;
+      const htmlSize  = Math.round(html.length / 1024);
 
-      // ── Scripts / CSS ────────────────────────────────────
-      const scripts  = (html.match(/<script[^>]+src=["'][^"']+["']/gi)||[]).length;
-      const styles   = (html.match(/<link[^>]+rel=["']stylesheet["'][^>]*>/gi)||[]).length;
-      const htmlSize = Math.round(html.length / 1024);
-
-      // ── Robots.txt y sitemap ─────────────────────────────
       let hasSitemap = /sitemap/i.test(html);
       let hasRobots  = false;
       try {
@@ -71,8 +65,7 @@ export default async function handler(req, res) {
       } catch(_) {}
 
       // ─────────────────────────────────────────────────────
-      // PASO 2: Extracción de links de redes sociales del HTML
-      // Busca TODOS los href que contengan dominios de redes
+      // PASO 2: Extracción de redes sociales desde el HTML
       // ─────────────────────────────────────────────────────
       const socialPatterns = {
         facebook:  /href=["']([^"']*facebook\.com[^"']*)["']/gi,
@@ -87,62 +80,41 @@ export default async function handler(req, res) {
 
       const foundLinks = {};
       for (const [network, pattern] of Object.entries(socialPatterns)) {
-        const matches = [...html.matchAll(pattern)].map(m => m[1]).filter(u => {
-          // Filtrar solo links válidos (no scripts, no variables JS)
-          return u.startsWith("http") && !u.includes("javascript:") && !u.includes("${");
-        });
-        // Deduplicar
+        const matches = [...html.matchAll(pattern)].map(m => m[1]).filter(u =>
+          u.startsWith("http") && !u.includes("javascript:") && !u.includes("${")
+        );
         const unique = [...new Set(matches)];
-        if (unique.length > 0) foundLinks[network] = unique[0]; // tomar el primero/más relevante
+        if (unique.length > 0) foundLinks[network] = unique[0];
       }
 
       // ─────────────────────────────────────────────────────
-      // PASO 3: Verificar cada link de red social encontrado
-      // Hace HEAD request para confirmar que la URL existe
+      // PASO 3: Verificar cada red social encontrada
       // ─────────────────────────────────────────────────────
       const verifiedSocials = {};
-
       await Promise.allSettled(
         Object.entries(foundLinks).map(async ([network, socialUrl]) => {
           try {
             const r = await fetch(socialUrl, {
               method: "HEAD",
               signal: AbortSignal.timeout(4000),
-              headers: {
-                "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)"
-              },
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
               redirect: "follow"
             });
-            // Considerar válido si responde 200, 301, 302, 403 (perfil privado) o 405
-            const validStatuses = [200, 301, 302, 403, 405];
             verifiedSocials[network] = {
               url: socialUrl,
               status: r.status,
-              verified: validStatuses.includes(r.status)
+              verified: [200, 301, 302, 403, 405].includes(r.status)
             };
           } catch(e) {
-            verifiedSocials[network] = {
-              url: socialUrl,
-              status: null,
-              verified: false,
-              error: e.message
-            };
+            verifiedSocials[network] = { url: socialUrl, status: null, verified: false };
           }
         })
       );
 
-      // ─────────────────────────────────────────────────────
-      // Construir objeto de redes con datos verificados
-      // ─────────────────────────────────────────────────────
       const buildSocialData = (network) => {
         if (verifiedSocials[network]) {
           const d = verifiedSocials[network];
-          return {
-            encontrado: true,
-            url: d.url,
-            verificado: d.verified,
-            httpStatus: d.status
-          };
+          return { encontrado: true, url: d.url, verificado: d.verified, httpStatus: d.status };
         }
         return { encontrado: false, url: null, verificado: false, httpStatus: null };
       };
@@ -155,10 +127,8 @@ export default async function handler(req, res) {
         h1s: h1s.slice(0, 5), h1Count: h1s.length,
         h2s: h2s.slice(0, 6), h2Count: h2s.length,
         h3Count: h3s.length,
-        totalImgs, imgsNoAlt,
-        scripts, styles,
+        totalImgs, imgsNoAlt, scripts, styles,
         hasRobots, hasSitemap,
-        // Redes verificadas con URL real o no encontradas
         socials: {
           facebook:  buildSocialData("facebook"),
           instagram: buildSocialData("instagram"),
@@ -177,89 +147,110 @@ export default async function handler(req, res) {
     }
 
     // ─────────────────────────────────────────────────────────
-    // PASO 4: Prompt a Groq con instrucción estricta de no inventar
+    // PASO 4: Construir array de redes desde scraping REAL
+    // (esto va directo al JSON final, sin pasar por Groq)
     // ─────────────────────────────────────────────────────────
-    const socialsJson = JSON.stringify(siteData.socials || {}, null, 2);
+    const labelMap = {
+      facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn",
+      tiktok: "TikTok", twitter: "Twitter/X", youtube: "YouTube",
+      whatsapp: "WhatsApp", pinterest: "Pinterest"
+    };
 
-const prompt = `Eres un experto en SEO y marketing digital.
+    const redesFromScraping = Object.entries(siteData.socials || {}).map(([key, val]) => {
+      const nombre = labelMap[key] || key;
+      if (val.encontrado && val.verificado) {
+        return {
+          nombre,
+          estado: "activo",
+          nota: `Perfil encontrado y verificado: ${val.url ? val.url.replace(/^https?:\/\//, "").slice(0, 45) : ""}`,
+          url: val.url
+        };
+      } else if (val.encontrado && !val.verificado) {
+        return {
+          nombre,
+          estado: "inactivo",
+          nota: `Enlace detectado en el sitio pero no accesible (HTTP ${val.httpStatus || "error"})`,
+          url: val.url
+        };
+      } else {
+        return {
+          nombre,
+          estado: "no detectado",
+          nota: "No se encontró ningún enlace a esta red en el sitio.",
+          url: null
+        };
+      }
+    });
 
-Analiza los datos REALES extraídos del sitio web ${url}.
+    // ─────────────────────────────────────────────────────────
+    // PASO 5: Prompt a Groq — solo para análisis SEO/contenido
+    // Los nombres de campo son FIJOS con ejemplos explícitos
+    // ─────────────────────────────────────────────────────────
+    const prompt = `Eres un experto en SEO y marketing digital. Analiza los datos del sitio web ${url}.
 
-REGLA CLAVE:
-- Usa los datos proporcionados como base
-- Puedes inferir información SOLO si está directamente relacionada con esos datos
+REGLAS:
+- Usa SOLO los datos proporcionados
+- Puedes inferir con lógica basada en title, headings y estructura
+- Si algo no se puede deducir, escribe "No detectado"
 - NO inventes datos externos
-- Si algo no puede deducirse, indica "No detectado"
 
-TIPOS DE RESPUESTA:
-
-1. DATOS OBJETIVOS:
-→ Usa exactamente lo detectado
-
-2. ANÁLISIS (permitido):
-→ Puedes inferir usando lógica basada en:
-   - title
-   - headings
-   - estructura
-   - dominio
-
-→ Usa lenguaje como:
-   "Probablemente"
-   "Se sugiere que"
-   "Podría estar orientado a"
-
-INCLUYE ANÁLISIS BÁSICO (OBLIGATORIO):
-
-Debes generar un bloque llamado "analisis_basico" con:
-
-- tipo_negocio → qué tipo de empresa o web es
-- nivel_seo → bajo, medio o alto según los datos
-- claridad_mensaje → baja, media o alta
-- madurez_digital → baja, media o alta
-
-IMPORTANTE:
-- No inventar datos
-- Basarse en title, headings y estructura
-- Se permite inferencia lógica
-
-PÚBLICO OBJETIVO:
-
-- Inferir de contenido y estructura
-- NO inventar datos demográficos exactos
-- Sí estimar perfiles generales
-
-MEJORAS:
-
-- Basadas en datos reales detectados
-- Complementadas con buenas prácticas SEO estándar
-
-=== DATOS REALES EXTRAÍDOS ===
+=== DATOS EXTRAÍDOS DEL SITIO ===
 ${JSON.stringify(siteData, null, 2)}
 
-=== REDES SOCIALES VERIFICADAS ===
-${JSON.stringify(siteData.socials || {}, null, 2)}
-
-Responde ÚNICAMENTE con JSON válido puro, sin markdown, sin bloques de código:
+=== INSTRUCCIÓN DE FORMATO ===
+Responde ÚNICAMENTE con un objeto JSON válido puro. Sin markdown. Sin texto adicional. Sin bloques de código.
+USA EXACTAMENTE estos nombres de campo (no uses sinónimos ni traducciones):
 
 {
-  "scores": {...},
-
-  "analisis_basico": {
-    "tipo_negocio": "...",
-    "nivel_seo": "...",
-    "claridad_mensaje": "...",
-    "madurez_digital": "..."
+  "scores": {
+    "seo": 65,
+    "mobile": 70,
+    "velocidad": 55
   },
-
-  "resumen": "...",
-  "posicionamiento": "...",
-  "publico": {...},
-  "redes": [...],
-  "seo_criterios": [...],
-  "keywords": [...],
-  "mejoras": [...]
+  "analisis_basico": {
+    "tipo_negocio": "Agencia de marketing digital",
+    "nivel_seo": "medio",
+    "claridad_mensaje": "alta",
+    "madurez_digital": "media"
+  },
+  "resumen": "Descripción breve del sitio en 2 oraciones.",
+  "posicionamiento": "Descripción de visibilidad y posicionamiento online.",
+  "publico": {
+    "edad": "25-45 años",
+    "perfil": "Emprendedores y gerentes",
+    "geografia": "Latinoamérica",
+    "intereses": "Marketing, tecnología",
+    "intencion": "Buscan agencia digital",
+    "dispositivo": "Mobile 60%, Desktop 40%"
+  },
+  "seo_criterios": [
+    { "criterio": "Título y meta descripción", "score": 75, "nota": "El título tiene 60 caracteres, adecuado." },
+    { "criterio": "Estructura de encabezados", "score": 60, "nota": "Se detectaron 2 H1 y varios H2." },
+    { "criterio": "Palabras clave principales", "score": 55, "nota": "Keywords detectadas en title pero no en meta." },
+    { "criterio": "URLs amigables", "score": 80, "nota": "URL limpia y descriptiva." },
+    { "criterio": "HTTPS / Seguridad", "score": 90, "nota": "El sitio usa HTTPS correctamente." },
+    { "criterio": "Velocidad estimada", "score": 50, "nota": "HTML de 45KB con 8 scripts externos." }
+  ],
+  "keywords": ["marketing digital", "seo", "agencia", "publicidad", "google ads"],
+  "mejoras": [
+    { "impacto": "alto", "texto": "Descripción de la mejora crítica." },
+    { "impacto": "alto", "texto": "Otra mejora crítica." },
+    { "impacto": "medio", "texto": "Mejora importante." },
+    { "impacto": "medio", "texto": "Otra mejora importante." },
+    { "impacto": "ok", "texto": "Punto positivo del sitio." },
+    { "impacto": "ok", "texto": "Otro punto positivo." }
+  ]
 }
-`;
+
+IMPORTANTE — NOMBRES DE CAMPO OBLIGATORIOS:
+- En "seo_criterios": usa EXACTAMENTE "criterio", "score", "nota"
+- En "mejoras": usa EXACTAMENTE "impacto", "texto"
+- En "scores": usa EXACTAMENTE "seo", "mobile", "velocidad"
+- En "analisis_basico": usa EXACTAMENTE "tipo_negocio", "nivel_seo", "claridad_mensaje", "madurez_digital"
+- En "publico": usa EXACTAMENTE "edad", "perfil", "geografia", "intereses", "intencion", "dispositivo"
+- "nivel_seo", "claridad_mensaje", "madurez_digital" deben ser: "bajo", "medio" o "alto" / "baja", "media" o "alta"
+- "impacto" debe ser exactamente: "alto", "medio" o "ok"
+NO uses otros nombres de campo. NO omitas ningún campo.`;
 
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -281,8 +272,8 @@ Responde ÚNICAMENTE con JSON válido puro, sin markdown, sin bloques de código
       return res.status(500).json({ error: "Error de Groq", details: text });
     }
 
-    const data = JSON.parse(text);
-    const raw  = data?.choices?.[0]?.message?.content || "";
+    const groqData = JSON.parse(text);
+    const raw = groqData?.choices?.[0]?.message?.content || "";
 
     let parsed = null;
     try {
@@ -300,13 +291,67 @@ Responde ÚNICAMENTE con JSON válido puro, sin markdown, sin bloques de código
       });
     }
 
-    // Adjuntar metadata de scraping para transparencia
+    // ─────────────────────────────────────────────────────────
+    // PASO 6: Normalización defensiva de campos críticos
+    // Garantiza que seo_criterios y mejoras siempre tengan
+    // los nombres correctos sin importar lo que devolvió Groq
+    // ─────────────────────────────────────────────────────────
+
+    // Normalizar seo_criterios
+    if (Array.isArray(parsed.seo_criterios)) {
+      parsed.seo_criterios = parsed.seo_criterios.map(item => ({
+        criterio: item.criterio || item.name || item.label || item.factor || item.titulo || item.title || "—",
+        score:    Number(item.score ?? item.value ?? item.puntuacion ?? item.puntaje ?? item.porcentaje ?? 50),
+        nota:     item.nota || item.descripcion || item.observacion || item.detalle || item.description || "—"
+      }));
+    } else {
+      parsed.seo_criterios = [];
+    }
+
+    // Normalizar mejoras
+    if (Array.isArray(parsed.mejoras)) {
+      parsed.mejoras = parsed.mejoras.map(item => ({
+        impacto: item.impacto || item.prioridad || item.nivel || item.priority || item.impact || "medio",
+        texto:   item.texto || item.descripcion || item.recomendacion || item.accion || item.mejora || item.description || item.text || "—"
+      }));
+    } else {
+      parsed.mejoras = [];
+    }
+
+    // Normalizar scores
+    if (parsed.scores) {
+      parsed.scores = {
+        seo:       Number(parsed.scores.seo       ?? parsed.scores.SEO       ?? 50),
+        mobile:    Number(parsed.scores.mobile     ?? parsed.scores.movil     ?? parsed.scores.Mobile    ?? 50),
+        velocidad: Number(parsed.scores.velocidad  ?? parsed.scores.speed     ?? parsed.scores.Velocidad ?? 50)
+      };
+    } else {
+      parsed.scores = { seo: 50, mobile: 50, velocidad: 50 };
+    }
+
+    // Normalizar analisis_basico
+    if (!parsed.analisis_basico || typeof parsed.analisis_basico !== "object") {
+      parsed.analisis_basico = {};
+    }
+
+    // Normalizar publico
+    if (!parsed.publico || typeof parsed.publico !== "object") {
+      parsed.publico = {};
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // PASO 7: Inyectar redes desde scraping REAL
+    // Reemplaza completamente lo que Groq haya generado
+    // ─────────────────────────────────────────────────────────
+    parsed.redes = redesFromScraping;
+
+    // Metadata de transparencia
     parsed._meta = {
-      scrapedAt: new Date().toISOString(),
+      scrapedAt:      new Date().toISOString(),
       responseTimeMs: siteData.responseTime,
-      htmlSizeKB: siteData.htmlSize,
-      isHttps: siteData.isHttps,
-      socialsFound: Object.entries(siteData.socials || {})
+      htmlSizeKB:     siteData.htmlSize,
+      isHttps:        siteData.isHttps,
+      socialsFound:   Object.entries(siteData.socials || {})
         .filter(([, v]) => v.encontrado)
         .map(([k, v]) => ({ red: k, url: v.url, verificado: v.verificado }))
     };
