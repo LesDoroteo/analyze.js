@@ -208,12 +208,19 @@ TIPOS DE RESPUESTA:
    "Se sugiere que"
    "Podría estar orientado a"
 
-INCLUYE ANÁLISIS BÁSICO:
+INCLUYE ANÁLISIS BÁSICO (OBLIGATORIO):
 
-- Tipo de negocio detectado
-- Nivel de optimización SEO (bajo, medio, alto)
-- Claridad del mensaje principal
-- Nivel de madurez digital
+Debes generar un bloque llamado "analisis_basico" con:
+
+- tipo_negocio → qué tipo de empresa o web es
+- nivel_seo → bajo, medio o alto según los datos
+- claridad_mensaje → baja, media o alta
+- madurez_digital → baja, media o alta
+
+IMPORTANTE:
+- No inventar datos
+- Basarse en title, headings y estructura
+- Se permite inferencia lógica
 
 PÚBLICO OBJETIVO:
 
@@ -236,6 +243,14 @@ Responde ÚNICAMENTE con JSON válido puro, sin markdown, sin bloques de código
 
 {
   "scores": {...},
+
+  "analisis_basico": {
+    "tipo_negocio": "...",
+    "nivel_seo": "...",
+    "claridad_mensaje": "...",
+    "madurez_digital": "..."
+  },
+
   "resumen": "...",
   "posicionamiento": "...",
   "publico": {...},
