@@ -147,8 +147,8 @@ export default async function handler(req, res) {
     }
 
     // ─────────────────────────────────────────────────────────
-    // PASO 4: Construir array de redes desde scraping REAL
-    // (esto va directo al JSON final, sin pasar por Groq)
+    // PASO 4: Preparar estructura de redes desde scraping REAL
+    // La nota de análisis la generará Groq en el Paso 5
     // ─────────────────────────────────────────────────────────
     const labelMap = {
       facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn",
@@ -156,29 +156,15 @@ export default async function handler(req, res) {
       whatsapp: "WhatsApp", pinterest: "Pinterest"
     };
 
-    const redesFromScraping = Object.entries(siteData.socials || {}).map(([key, val]) => {
+    // Construir resumen de redes para pasarlo al prompt de Groq
+    const redesResumen = Object.entries(siteData.socials || {}).map(([key, val]) => {
       const nombre = labelMap[key] || key;
       if (val.encontrado && val.verificado) {
-        return {
-          nombre,
-          estado: "activo",
-          nota: `Perfil encontrado y verificado: ${val.url ? val.url.replace(/^https?:\/\//, "").slice(0, 45) : ""}`,
-          url: val.url
-        };
+        return { red: nombre, estado: "activo",       url: val.url };
       } else if (val.encontrado && !val.verificado) {
-        return {
-          nombre,
-          estado: "inactivo",
-          nota: `Enlace detectado en el sitio pero no accesible (HTTP ${val.httpStatus || "error"})`,
-          url: val.url
-        };
+        return { red: nombre, estado: "inactivo",     url: val.url };
       } else {
-        return {
-          nombre,
-          estado: "no detectado",
-          nota: "No se encontró ningún enlace a esta red en el sitio.",
-          url: null
-        };
+        return { red: nombre, estado: "no detectado", url: null };
       }
     });
 
@@ -196,6 +182,14 @@ REGLAS:
 
 === DATOS EXTRAÍDOS DEL SITIO ===
 ${JSON.stringify(siteData, null, 2)}
+
+=== REDES SOCIALES DETECTADAS POR SCRAPING ===
+${JSON.stringify(redesResumen, null, 2)}
+
+Para cada red en la lista anterior genera un análisis de presencia y recomendación de marketing:
+- Si estado es "activo": analiza su probable posicionamiento, alcance o interacción estimada según el tipo de negocio. Ejemplo: "Perfil activo con buena presencia. Para un negocio de este tipo se recomienda publicar 4-5 veces por semana con contenido educativo."
+- Si estado es "inactivo": indica que el enlace existe pero el perfil no responde y sugiere revisarlo.
+- Si estado es "no detectado": indica que no tiene presencia en esa red y si sería recomendable crearla según el tipo de negocio.
 
 === INSTRUCCIÓN DE FORMATO ===
 Responde ÚNICAMENTE con un objeto JSON válido puro. Sin markdown. Sin texto adicional. Sin bloques de código.
@@ -232,6 +226,12 @@ USA EXACTAMENTE estos nombres de campo (no uses sinónimos ni traducciones):
     { "criterio": "Velocidad estimada", "score": 50, "nota": "HTML de 45KB con 8 scripts externos." }
   ],
   "keywords": ["marketing digital", "seo", "agencia", "publicidad", "google ads"],
+  "redes": [
+    { "nombre": "Facebook", "estado": "activo",       "nota": "Perfil activo. Buen canal para este tipo de negocio. Se recomienda publicar contenido de valor 3-4 veces por semana para mejorar el alcance orgánico." },
+    { "nombre": "Instagram", "estado": "activo",      "nota": "Presencia detectada. Ideal para mostrar casos de éxito y contenido visual. Aumentar frecuencia a 5 posts semanales con reels para mayor alcance." },
+    { "nombre": "LinkedIn",  "estado": "no detectado","nota": "No se detectó perfil en LinkedIn. Para una agencia B2B es una red clave. Se recomienda crear presencia y publicar contenido profesional." },
+    { "nombre": "TikTok",    "estado": "inactivo",    "nota": "Enlace encontrado pero perfil no accesible. Verificar si la cuenta está activa; TikTok tiene alto potencial de alcance orgánico para este sector." }
+  ],
   "mejoras": [
     { "impacto": "alto", "texto": "Descripción de la mejora crítica." },
     { "impacto": "alto", "texto": "Otra mejora crítica." },
@@ -248,8 +248,10 @@ IMPORTANTE — NOMBRES DE CAMPO OBLIGATORIOS:
 - En "scores": usa EXACTAMENTE "seo", "mobile", "velocidad"
 - En "analisis_basico": usa EXACTAMENTE "tipo_negocio", "nivel_seo", "claridad_mensaje", "madurez_digital"
 - En "publico": usa EXACTAMENTE "edad", "perfil", "geografia", "intereses", "intencion", "dispositivo"
+- En "redes": usa EXACTAMENTE "nombre", "estado", "nota" — genera UNA entrada por cada red de la lista de redes detectadas
 - "nivel_seo", "claridad_mensaje", "madurez_digital" deben ser: "bajo", "medio" o "alto" / "baja", "media" o "alta"
 - "impacto" debe ser exactamente: "alto", "medio" o "ok"
+- "estado" en redes debe ser exactamente: "activo", "inactivo" o "no detectado"
 NO uses otros nombres de campo. NO omitas ningún campo.`;
 
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -340,10 +342,26 @@ NO uses otros nombres de campo. NO omitas ningún campo.`;
     }
 
     // ─────────────────────────────────────────────────────────
-    // PASO 7: Inyectar redes desde scraping REAL
-    // Reemplaza completamente lo que Groq haya generado
+    // PASO 7: Normalizar redes generadas por Groq
+    // Si Groq las devolvió bien, usarlas. Fallback desde scraping.
     // ─────────────────────────────────────────────────────────
-    parsed.redes = redesFromScraping;
+    if (Array.isArray(parsed.redes) && parsed.redes.length > 0) {
+      parsed.redes = parsed.redes.map(r => ({
+        nombre: r.nombre || r.name || r.red || "—",
+        estado: String(r.estado || r.status || "no detectado").toLowerCase(),
+        nota:   r.nota   || r.descripcion || r.analysis || r.observacion || "—"
+      }));
+    } else {
+      parsed.redes = redesResumen.map(r => ({
+        nombre: r.red,
+        estado: r.estado,
+        nota: r.estado === "activo"
+          ? "Perfil detectado en el sitio. Se recomienda mantener actividad regular y revisar métricas de engagement."
+          : r.estado === "inactivo"
+          ? "Enlace encontrado pero perfil no accesible. Verificar el estado de la cuenta."
+          : "No se detectó presencia en esta red. Evaluar si es relevante para el negocio y considerar crear perfil."
+      }));
+    }
 
     // Metadata de transparencia
     parsed._meta = {
