@@ -256,8 +256,8 @@ Responde ÚNICAMENTE con JSON válido puro, sin markdown, sin bloques de código
   "publico": {...},
   "redes": [...],
   "seo_criterios": [...],
-  "kws": [...],
-  "mej": [...]
+  "keywords": [...],
+  "mejoras": [...]
 }
 `;
 
